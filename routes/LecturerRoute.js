@@ -1,27 +1,23 @@
 import express from "express";
 import {
-  registerLecturer,
-  loginLecturer,
   appointmentsLecturer,
-  appointmentCancel,
+  appointmentApprove,
+  appointmentDecline,
   lecturerList,
-  changeAvailablity,
-  appointmentComplete,
   lecturerDashboard,
   lecturerProfile,
   updateLecturerProfile,
 } from "../controller/LecturerController.js";
-import AuthLecturer from "../middleware/AuthLecturer.js";
+import authMiddleware from "../middleware/AuthLecturer.js";
+
 const lecturerRouter = express.Router();
 
-lecturerRouter.post("/register", registerLecturer);
-lecturerRouter.post("/login", loginLecturer);
-lecturerRouter.post("/cancel-appointment", AuthLecturer, appointmentCancel);
-lecturerRouter.get("/appointments", AuthLecturer, appointmentsLecturer);
 lecturerRouter.get("/list", lecturerList);
-lecturerRouter.post("/change-availability", AuthLecturer, changeAvailablity);
-lecturerRouter.post("/complete-appointment", AuthLecturer, appointmentComplete);
-lecturerRouter.get("/dashboard", AuthLecturer, lecturerDashboard);
-lecturerRouter.get("/profile", AuthLecturer, lecturerProfile);
-lecturerRouter.post("/update-profile", AuthLecturer, updateLecturerProfile);
+lecturerRouter.get("/appointments", authMiddleware, appointmentsLecturer);
+lecturerRouter.post("/approve-appointment", authMiddleware, appointmentApprove);
+lecturerRouter.post("/decline-appointment", authMiddleware, appointmentDecline);
+lecturerRouter.get("/dashboard", authMiddleware, lecturerDashboard);
+lecturerRouter.get("/profile", authMiddleware, lecturerProfile);
+lecturerRouter.post("/update-profile", authMiddleware, updateLecturerProfile);
+
 export default lecturerRouter;

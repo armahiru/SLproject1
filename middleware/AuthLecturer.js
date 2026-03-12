@@ -1,15 +1,19 @@
 import jwt from "jsonwebtoken";
 
-// lecturer authentication middleware
-const AuthLecturer = async (req, res, next) => {
-    // accept both ltoken (new) and dtoken (old) for backward compatibility
-    const token = req.headers?.ltoken || req.headers?.dtoken;
+// Unified authentication middleware (same as AuthStudent)
+const authMiddleware = async (req, res, next) => {
+    const token = req.headers?.token;
     if (!token) {
         return res.json({ success: false, message: "Not Authorized Login Again" });
     }
     try {
         const token_decode = jwt.verify(token, process.env.JWT_SECRET);
-        req.body.lecturerId = token_decode.id;
+        // Ensure req.body exists for GET requests
+        if (!req.body) {
+            req.body = {};
+        }
+        req.body.userId = token_decode.id;
+        req.body.userRole = token_decode.role;
         next();
     } catch (error) {
         console.log(error);
@@ -17,4 +21,4 @@ const AuthLecturer = async (req, res, next) => {
     }
 };
 
-export default AuthLecturer;
+export default authMiddleware;

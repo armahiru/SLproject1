@@ -1,8 +1,7 @@
-import jwt from "jsonwebtoken";
-import bcrypt from "bcrypt";
+import userModel from "../models/UserModels.js";
 import lecturerModel from "../models/LecturerModels.js";
 import appointmentModel from "../models/AppointmentModels.js";
-import validator from "validator";
+import notificationModel from "../models/NotificationModels.js";
 import mongoose from "mongoose";
 
 function ensureDbConnected(res) {
@@ -16,232 +15,171 @@ function ensureDbConnected(res) {
     return true;
 }
 
-// API for lecturer registration
-const registerLecturer = async (req, res) => {
+// Note: register and login moved to AuthController
+
+// API to get lecturer appointments
+const appointmentsLecturer = async (req, res) => {
     try {
-        if (!ensureDbConnected(res)) return;
+        const { userId } = req.body;
+        const appointments = await appointmentModel
+            .find({ lecturerId: userId })
+            .populate('studentId', 'name email')
+            .sort({ createdAt: -1 });
 
-        const { name, email, password } = req.body;
-
-        if (!name || !email || !password) {
-            return res.json({ success: false, message: "Missing Details" });
-        }
-
-        if (!validator.isEmail(email)) {
-            return res.json({ success: false, message: "Please enter a valid email" });
-        }
-
-        if (password.length < 8) {
-            return res.json({ success: false, message: "Please enter a strong password" });
-        }
-
-        const existing = await lecturerModel.findOne({ email });
-        if (existing) {
-            return res.json({ success: false, message: "Lecturer already exists" });
-        }
-
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(password, salt);
-
-        const lecturer = await lecturerModel.create({
-            name,
-            email,
-            password: hashedPassword,
-        });
-
-        const token = jwt.sign({ id: lecturer._id }, process.env.JWT_SECRET);
-        res.json({ success: true, token });
+        res.json({ success: true, appointments });
     } catch (error) {
         console.log(error);
         res.json({ success: false, message: error.message });
     }
 };
 
-// API for lecturer login 
-const loginLecturer = async (req, res) => {
-
+// API to approve appointment
+const appointmentApprove = async (req, res) => {
     try {
+        const { userId, appointmentId } = req.body;
 
-        const { email, password } = req.body
-        const lecturer = await lecturerModel.findOne({ email })
+        const appointmentData = await appointmentModel.findById(appointmentId);
+        if (appointmentData && appointmentData.lecturerId.toString() === userId) {
+            await appointmentModel.findByIdAndUpdate(appointmentId, { status: 'APPROVED' });
 
-        if (!lecturer) {
-            return res.json({ success: false, message: "Invalid credentials" })
+            // Create notification for student
+            await notificationModel.create({
+                userId: appointmentData.studentId,
+                type: 'appointment_approved',
+                message: 'Your appointment has been approved',
+                status: 'UNREAD'
+            });
+
+            return res.json({ success: true, message: 'Appointment Approved' });
         }
 
-        const isMatch = await bcrypt.compare(password, lecturer.password)
+        res.json({ success: false, message: 'Unauthorized action' });
+    } catch (error) {
+        console.log(error);
+        res.json({ success: false, message: error.message });
+    }
+};
 
-        if (isMatch) {
-            const token = jwt.sign({ id: lecturer._id }, process.env.JWT_SECRET)
-            res.json({ success: true, token })
-        } else {
-            res.json({ success: false, message: "Invalid credentials" })
+// API to decline appointment
+const appointmentDecline = async (req, res) => {
+    try {
+        const { userId, appointmentId } = req.body;
+
+        const appointmentData = await appointmentModel.findById(appointmentId);
+        if (appointmentData && appointmentData.lecturerId.toString() === userId) {
+            await appointmentModel.findByIdAndUpdate(appointmentId, { status: 'DECLINED' });
+
+            // Create notification for student
+            await notificationModel.create({
+                userId: appointmentData.studentId,
+                type: 'appointment_declined',
+                message: 'Your appointment has been declined',
+                status: 'UNREAD'
+            });
+
+            return res.json({ success: true, message: 'Appointment Declined' });
         }
 
-
+        res.json({ success: false, message: 'Unauthorized action' });
     } catch (error) {
-        console.log(error)
-        res.json({ success: false, message: error.message })
+        console.log(error);
+        res.json({ success: false, message: error.message });
     }
-}
+};
 
-// API to get lecturer appointments for lecturer panel
-const appointmentsLecturer = async (req, res) => {
-    try {
-
-        const { lecturerId } = req.body
-        const appointments = await appointmentModel.find({ lecturerId })
-
-        res.json({ success: true, appointments })
-
-    } catch (error) {
-        console.log(error)
-        res.json({ success: false, message: error.message })
-    }
-}
-
-// API to cancel appointment from lecturer panel
-const appointmentCancel = async (req, res) => {
-    try {
-
-        const { lecturerId, appointmentId } = req.body
-
-        const appointmentData = await appointmentModel.findById(appointmentId)
-        if (appointmentData && appointmentData.lecturerId === lecturerId) {
-            await appointmentModel.findByIdAndUpdate(appointmentId, { cancelled: true })
-            return res.json({ success: true, message: 'Appointment Cancelled' })
-        }
-
-        res.json({ success: false, message: 'Unauthorized action' })
-
-    } catch (error) {
-        console.log(error)
-        res.json({ success: false, message: error.message })
-    }
-
-}
-
-// API to mark appointment completed from lecturer panel
-const appointmentComplete = async (req, res) => {
-    try {
-
-        const { lecturerId, appointmentId } = req.body
-
-        const appointmentData = await appointmentModel.findById(appointmentId)
-        if (appointmentData && appointmentData.lecturerId === lecturerId) {
-            await appointmentModel.findByIdAndUpdate(appointmentId, { isCompleted: true })
-            return res.json({ success: true, message: 'Appointment Completed' })
-        }
-
-        res.json({ success: false, message: 'Unauthorized action' })
-
-    } catch (error) {
-        console.log(error)
-        res.json({ success: false, message: error.message })
-    }
-
-}
-
-// API to get all lecturers list for frontend (for students to choose from)
+// API to get all lecturers list
 const lecturerList = async (req, res) => {
     try {
+        const lecturers = await lecturerModel
+            .find({})
+            .populate('userId', 'name email');
 
-        const lecturers = await lecturerModel.find({}).select(['-password', '-email'])
-        res.json({ success: true, lecturers })
-
+        res.json({ success: true, lecturers });
     } catch (error) {
-        console.log(error)
-        res.json({ success: false, message: error.message })
+        console.log(error);
+        res.json({ success: false, message: error.message });
     }
+};
 
-}
-
-// API to change lecturer availability for lecturer panel
-const changeAvailablity = async (req, res) => {
-    try {
-
-        const { lecturerId } = req.body
-
-        const lecturerData = await lecturerModel.findById(lecturerId)
-        await lecturerModel.findByIdAndUpdate(lecturerId, { available: !lecturerData.available })
-        res.json({ success: true, message: 'Availablity Changed' })
-
-    } catch (error) {
-        console.log(error)
-        res.json({ success: false, message: error.message })
-    }
-}
-
-// API to get lecturer profile for lecturer panel
+// API to get lecturer profile
 const lecturerProfile = async (req, res) => {
     try {
+        const { userId } = req.body;
+        const userData = await userModel.findById(userId).select('-password');
+        const lecturerInfo = await lecturerModel.findOne({ userId });
 
-        const { lecturerId } = req.body
-        const profileData = await lecturerModel.findById(lecturerId).select('-password')
-
-        res.json({ success: true, profileData })
-
+        res.json({ success: true, userData, lecturerInfo });
     } catch (error) {
-        console.log(error)
-        res.json({ success: false, message: error.message })
+        console.log(error);
+        res.json({ success: false, message: error.message });
     }
-}
+};
 
-// API to update lecturer profile data from lecturer panel
+// API to update lecturer profile
 const updateLecturerProfile = async (req, res) => {
     try {
+        const { userId, name, department, specialization, availability } = req.body;
 
-        const { lecturerId, address, available } = req.body
-
-        await lecturerModel.findByIdAndUpdate(lecturerId, { address, available })
-
-        res.json({ success: true, message: 'Profile Updated' })
-
-    } catch (error) {
-        console.log(error)
-        res.json({ success: false, message: error.message })
-    }
-}
-
-// API to get dashboard data for lecturer panel
-const lecturerDashboard = async (req, res) => {
-    try {
-
-        const { lecturerId } = req.body
-
-        const appointments = await appointmentModel.find({ lecturerId })
-
-        let students = []
-
-        appointments.map((item) => {
-            if (!students.includes(item.studentId)) {
-                students.push(item.studentId)
-            }
-        })
-
-        const dashData = {
-            appointments: appointments.length,
-            students: students.length,
-            latestAppointments: appointments.reverse()
+        if (name) {
+            await userModel.findByIdAndUpdate(userId, { name });
         }
 
-        res.json({ success: true, dashData })
+        const lecturerInfo = await lecturerModel.findOne({ userId });
+        if (lecturerInfo) {
+            const updateData = {};
+            if (department) updateData.department = department;
+            if (specialization) updateData.specialization = specialization;
+            if (availability) updateData.availability = availability;
 
+            await lecturerModel.findByIdAndUpdate(lecturerInfo._id, updateData);
+        }
+
+        res.json({ success: true, message: 'Profile Updated' });
     } catch (error) {
-        console.log(error)
-        res.json({ success: false, message: error.message })
+        console.log(error);
+        res.json({ success: false, message: error.message });
     }
-}
+};
+
+// API to get dashboard data
+const lecturerDashboard = async (req, res) => {
+    try {
+        const { userId } = req.body;
+
+        const appointments = await appointmentModel.find({ lecturerId: userId });
+
+        const pendingCount = appointments.filter(a => a.status === 'PENDING').length;
+        const approvedCount = appointments.filter(a => a.status === 'APPROVED').length;
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const todayAppointments = appointments.filter(a => {
+            const appDate = new Date(a.date);
+            appDate.setHours(0, 0, 0, 0);
+            return appDate.getTime() === today.getTime() && a.status === 'APPROVED';
+        });
+
+        const dashData = {
+            totalAppointments: appointments.length,
+            pendingRequests: pendingCount,
+            approvedAppointments: approvedCount,
+            todayConsultations: todayAppointments.length,
+            latestAppointments: appointments.slice(0, 5)
+        };
+
+        res.json({ success: true, dashData });
+    } catch (error) {
+        console.log(error);
+        res.json({ success: false, message: error.message });
+    }
+};
 
 export {
-    registerLecturer,
-    loginLecturer,
     appointmentsLecturer,
-    appointmentCancel,
+    appointmentApprove,
+    appointmentDecline,
     lecturerList,
-    changeAvailablity,
-    appointmentComplete,
     lecturerDashboard,
     lecturerProfile,
     updateLecturerProfile
-}
+};

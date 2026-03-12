@@ -1,14 +1,19 @@
 import jwt from "jsonwebtoken";
 
-// student authentication middleware
-const AuthStudent = async (req, res, next) => {
-    const { token } = req.headers;
+// Unified authentication middleware
+const authMiddleware = async (req, res, next) => {
+    const token = req.headers?.token;
     if (!token) {
         return res.json({ success: false, message: "Not Authorized Login Again" });
     }
     try {
         const token_decode = jwt.verify(token, process.env.JWT_SECRET);
-        req.body.studentId = token_decode.id;
+        // Ensure req.body exists for GET requests
+        if (!req.body) {
+            req.body = {};
+        }
+        req.body.userId = token_decode.id;
+        req.body.userRole = token_decode.role;
         next();
     } catch (error) {
         console.log(error);
@@ -16,4 +21,4 @@ const AuthStudent = async (req, res, next) => {
     }
 };
 
-export default AuthStudent;
+export default authMiddleware;

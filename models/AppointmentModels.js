@@ -1,16 +1,12 @@
-import mongoose from "mongoose"
+import mongoose from "mongoose";
 
 const appointmentSchema = new mongoose.Schema({
-    studentId: { type: String, required: true },
-    lecturerId: { type: String, required: true },
-    slotDate: { type: String, required: true },
-    slotTime: { type: String, required: true },
-    studentData: { type: Object, required: true },
-    lecturerData: { type: Object, required: true },
-    date: { type: Number, required: true },
-    cancelled: { type: Boolean, default: false },
-    isCompleted: { type: Boolean, default: false }
-})
+    studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'user', required: true },
+    lecturerId: { type: mongoose.Schema.Types.ObjectId, ref: 'user', required: true },
+    date: { type: Date, required: true },
+    topic: { type: String, default: "" },
+    status: { type: String, enum: ['PENDING', 'APPROVED', 'DECLINED'], default: 'PENDING' },
+}, { timestamps: true });
 
-const appointmentModel = mongoose.models.appointment || mongoose.model("appointment", appointmentSchema)
-export default appointmentModel
+const appointmentModel = mongoose.models.appointment || mongoose.model("appointment", appointmentSchema);
+export default appointmentModel;
