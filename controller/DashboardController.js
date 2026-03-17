@@ -5,18 +5,27 @@ const getStudentDashboard = async (req, res) => {
     try {
         const { userId } = req.body;
 
-        const appointments = await appointmentModel.find({ studentId: userId });
+        const appointments = await appointmentModel.find({ studentId: userId })
+            .populate('lecturerId', 'name email')
+            .sort({ createdAt: -1 });
 
         const pendingCount = appointments.filter(a => a.status === 'PENDING').length;
         const approvedCount = appointments.filter(a => a.status === 'APPROVED').length;
         const declinedCount = appointments.filter(a => a.status === 'DECLINED').length;
+
+        // Get upcoming approved appointments
+        const now = new Date();
+        const upcomingAppointments = appointments.filter(a => 
+            a.status === 'APPROVED' && new Date(a.date) > now
+        ).slice(0, 5);
 
         const dashData = {
             totalAppointments: appointments.length,
             pendingAppointments: pendingCount,
             approvedAppointments: approvedCount,
             declinedAppointments: declinedCount,
-            latestAppointments: appointments.slice(0, 5)
+            latestAppointments: appointments.slice(0, 5),
+            upcomingAppointments: upcomingAppointments
         };
 
         res.json({ success: true, dashData });
@@ -31,7 +40,9 @@ const getLecturerDashboard = async (req, res) => {
     try {
         const { userId } = req.body;
 
-        const appointments = await appointmentModel.find({ lecturerId: userId });
+        const appointments = await appointmentModel.find({ lecturerId: userId })
+            .populate('studentId', 'name email')
+            .sort({ createdAt: -1 });
 
         const pendingCount = appointments.filter(a => a.status === 'PENDING').length;
         const approvedCount = appointments.filter(a => a.status === 'APPROVED').length;

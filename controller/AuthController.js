@@ -4,7 +4,8 @@ import validator from "validator";
 import crypto from "crypto";
 import userModel from "../models/UserModels.js";
 import lecturerModel from "../models/LecturerModels.js";
-import { sendVerificationEmail, sendPasswordResetEmail } from "../config/nodemailer.js";
+import studentModel from "../models/StudentModels.js";
+import { sendVerificationEmail, sendPasswordResetEmail, sendPasswordChangedEmail } from "../config/nodemailer.js";
 import mongoose from "mongoose";
 
 function ensureDbConnected(res) {
@@ -76,20 +77,28 @@ const register = async (req, res) => {
             await lecturerInfo.save();
         }
 
-        // Send verification email
-        const emailResult = await sendVerificationEmail(email, verificationToken, name);
-        
-        if (!emailResult.success) {
-            console.error('Failed to send verification email:', emailResult.error);
-            // Continue registration even if email fails
+        // If student, create student info document
+        if (role === 'STUDENT') {
+            const studentInfo = new studentModel({
+                userId: user._id,
+                department: "",
+                phone: "",
+                studentId: ""
+            });
+            await studentInfo.save();
         }
+
+        // Send verification email in the background (don't block the response)
+        sendVerificationEmail(email, verificationToken, name).catch(err => {
+            console.error('Failed to send verification email:', err);
+        });
 
         const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET);
         res.json({ 
             success: true, 
             token,
             message: 'Registration successful! Please check your email to verify your account.',
-            emailSent: emailResult.success
+            emailSent: true
         });
 
     } catch (error) {
@@ -119,7 +128,7 @@ const login = async (req, res) => {
 
         if (isMatch) {
             const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET);
-            res.json({ success: true, token, role: user.role });
+            res.json({ success: true, token, role: user.role, name: user.name });
         } else {
             res.json({ success: false, message: "Invalid credentials" });
         }
@@ -289,4 +298,48 @@ const resendVerification = async (req, res) => {
     }
 };
 
-export { register, login, forgotPassword, resetPassword, verifyEmail, resendVerification };
+
+// API to change password (authenticated)
+const changePassword = async (req, res) => {
+    try {
+        if (!ensureDbConnected(res)) return;
+
+        const { userId, currentPassword, newPassword } = req.body;
+
+        if (!currentPassword || !newPassword) {
+            return res.json({ success: false, message: "Current and new password are required" });
+        }
+
+        if (newPassword.length < 8) {
+            return res.json({ success: false, message: "New password must be at least 8 characters" });
+        }
+
+        const user = await userModel.findById(userId);
+        if (!user) {
+            return res.json({ success: false, message: "User not found" });
+        }
+
+        const isMatch = await bcrypt.compare(currentPassword, user.password);
+        if (!isMatch) {
+            return res.json({ success: false, message: "Current password is incorrect" });
+        }
+
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+        user.password = hashedPassword;
+        await user.save();
+
+        // Send confirmation email in the background (don't block the response)
+        sendPasswordChangedEmail(user.email, user.name).catch(err => {
+            console.error('Failed to send password changed email:', err);
+        });
+
+        res.json({ success: true, message: "Password changed successfully" });
+    } catch (error) {
+        console.log(error);
+        res.json({ success: false, message: error.message });
+    }
+};
+
+export { register, login, forgotPassword, resetPassword, verifyEmail, resendVerification, changePassword };

@@ -19,6 +19,8 @@ const connectDB = async () => {
         serverSelectionTimeoutMS: 30000, // 30 seconds
         socketTimeoutMS: 45000, // 45 seconds
         bufferCommands: false,
+        tls: true,
+        tlsAllowInvalidCertificates: false,
     };
 
     mongoose.connection.on("connected", () => {

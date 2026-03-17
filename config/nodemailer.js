@@ -118,3 +118,49 @@ export const sendPasswordResetEmail = async (email, resetToken, name) => {
 };
 
 export default transporter;
+
+// Send password changed confirmation email
+export const sendPasswordChangedEmail = async (email, name) => {
+    const mailOptions = {
+        from: `"UniConsult" <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: 'Password Changed Successfully - UniConsult',
+        html: `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                    .header { background: #16A34A; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
+                    .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 5px 5px; }
+                    .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h1>Password Changed</h1>
+                    </div>
+                    <div class="content">
+                        <h2>Hi ${name},</h2>
+                        <p>Your password has been changed successfully.</p>
+                        <p>If you did not make this change, please contact support immediately or reset your password.</p>
+                    </div>
+                    <div class="footer">
+                        <p>&copy; 2026 UniConsult. All rights reserved.</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+        `
+    };
+
+    try {
+        await transporter.sendMail(mailOptions);
+        return { success: true };
+    } catch (error) {
+        console.error('Email sending error:', error);
+        return { success: false, error: error.message };
+    }
+};

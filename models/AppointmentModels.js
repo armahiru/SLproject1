@@ -5,6 +5,8 @@ const appointmentSchema = new mongoose.Schema({
     lecturerId: { type: mongoose.Schema.Types.ObjectId, ref: 'user', required: true },
     date: { type: Date, required: true },
     topic: { type: String, default: "" },
+    meetingType: { type: String, enum: ['online', 'in-person'], default: 'in-person' },
+    zoomLink: { type: String, default: "" },
     status: { type: String, enum: ['PENDING', 'APPROVED', 'DECLINED'], default: 'PENDING' },
 }, { timestamps: true });
 

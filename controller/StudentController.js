@@ -1,5 +1,6 @@
 import userModel from "../models/UserModels.js";
 import lecturerModel from "../models/LecturerModels.js";
+import studentModel from "../models/StudentModels.js";
 import appointmentModel from "../models/AppointmentModels.js";
 import notificationModel from "../models/NotificationModels.js";
 import mongoose from "mongoose";
@@ -23,7 +24,31 @@ const getProfile = async (req, res) => {
         const { userId } = req.body;
         const userData = await userModel.findById(userId).select('-password');
 
-        res.json({ success: true, userData });
+        if (!userData) {
+            return res.json({ success: false, message: "User not found" });
+        }
+
+        // Get student-specific data
+        let studentInfo = await studentModel.findOne({ userId });
+        if (!studentInfo) {
+            // Create student record if it doesn't exist (for users registered before this update)
+            studentInfo = await studentModel.create({
+                userId,
+                department: "",
+                phone: "",
+                studentId: ""
+            });
+        }
+
+        // Combine user + student data
+        const combined = {
+            ...userData.toObject(),
+            phone: studentInfo.phone,
+            studentId: studentInfo.studentId,
+            department: studentInfo.department
+        };
+
+        res.json({ success: true, userData: combined });
     } catch (error) {
         console.log(error);
         res.json({ success: false, message: error.message });
@@ -33,15 +58,40 @@ const getProfile = async (req, res) => {
 // API to update student profile
 const updateProfile = async (req, res) => {
     try {
-        const { userId, name } = req.body;
+        const { userId, name, phone, studentId, department } = req.body;
 
         if (!name) {
             return res.json({ success: false, message: "Name is required" });
         }
 
+        // Update name on user model
         await userModel.findByIdAndUpdate(userId, { name });
 
-        res.json({ success: true, message: "Profile Updated" });
+        // Update student-specific fields
+        let studentInfo = await studentModel.findOne({ userId });
+        if (!studentInfo) {
+            studentInfo = await studentModel.create({ userId });
+        }
+
+        const studentUpdate = {};
+        if (phone !== undefined) studentUpdate.phone = phone;
+        if (studentId !== undefined) studentUpdate.studentId = studentId;
+        if (department !== undefined) studentUpdate.department = department;
+
+        await studentModel.findByIdAndUpdate(studentInfo._id, studentUpdate);
+
+        // Return combined updated data
+        const updatedUser = await userModel.findById(userId).select('-password');
+        const updatedStudent = await studentModel.findOne({ userId });
+
+        const userData = {
+            ...updatedUser.toObject(),
+            phone: updatedStudent.phone,
+            studentId: updatedStudent.studentId,
+            department: updatedStudent.department
+        };
+
+        res.json({ success: true, message: "Profile Updated", userData });
     } catch (error) {
         console.log(error);
         res.json({ success: false, message: error.message });
@@ -49,12 +99,18 @@ const updateProfile = async (req, res) => {
 };
 
 // API for student to book consultation appointment with lecturer
+// API for student to book consultation appointment with lecturer
 const bookAppointment = async (req, res) => {
     try {
-        const { userId, lecturerId, date, topic } = req.body;
+        const { userId, lecturerId, date, topic, meetingType } = req.body;
 
         if (!lecturerId || !date) {
             return res.json({ success: false, message: "Missing required fields" });
+        }
+
+        // Validate meeting type
+        if (meetingType && !['online', 'in-person'].includes(meetingType)) {
+            return res.json({ success: false, message: "Invalid meeting type" });
         }
 
         // Find lecturer info
@@ -63,11 +119,29 @@ const bookAppointment = async (req, res) => {
             return res.json({ success: false, message: "Lecturer not found" });
         }
 
+        // Validate against lecturer's availability
+        const requestedDate = new Date(date);
+        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const requestedDay = dayNames[requestedDate.getDay()];
+        const requestedTime = requestedDate.toTimeString().slice(0, 5); // "HH:MM"
+
+        if (lecturerInfo.availability && lecturerInfo.availability.length > 0) {
+            const matchingSlot = lecturerInfo.availability.find(slot =>
+                slot.day === requestedDay &&
+                requestedTime >= slot.startTime &&
+                requestedTime < slot.endTime
+            );
+            if (!matchingSlot) {
+                return res.json({ success: false, message: "Selected time is outside the lecturer's available hours" });
+            }
+        }
+
         const appointmentData = {
             studentId: userId,
             lecturerId,
             date: new Date(date),
             topic: topic || "",
+            meetingType: meetingType || 'in-person',
             status: 'PENDING'
         };
 

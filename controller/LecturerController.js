@@ -86,6 +86,44 @@ const appointmentDecline = async (req, res) => {
         res.json({ success: false, message: error.message });
     }
 };
+// API to update zoom link for appointment
+const updateZoomLink = async (req, res) => {
+    try {
+        const { userId, appointmentId, zoomLink } = req.body;
+
+        if (!appointmentId || !zoomLink) {
+            return res.json({ success: false, message: "Missing required fields" });
+        }
+
+        const appointmentData = await appointmentModel.findById(appointmentId);
+        if (!appointmentData) {
+            return res.json({ success: false, message: "Appointment not found" });
+        }
+
+        if (appointmentData.lecturerId.toString() !== userId) {
+            return res.json({ success: false, message: "Unauthorized action" });
+        }
+
+        if (appointmentData.meetingType !== 'online') {
+            return res.json({ success: false, message: "Can only add zoom link to online meetings" });
+        }
+
+        await appointmentModel.findByIdAndUpdate(appointmentId, { zoomLink });
+
+        // Create notification for student
+        await notificationModel.create({
+            userId: appointmentData.studentId,
+            type: 'zoom_link_added',
+            message: 'Zoom link has been added to your appointment',
+            status: 'UNREAD'
+        });
+
+        res.json({ success: true, message: "Zoom link updated successfully" });
+    } catch (error) {
+        console.log(error);
+        res.json({ success: false, message: error.message });
+    }
+};
 
 // API to get all lecturers list
 const lecturerList = async (req, res) => {
@@ -100,15 +138,56 @@ const lecturerList = async (req, res) => {
         res.json({ success: false, message: error.message });
     }
 };
+// API to get a specific lecturer's availability
+const lecturerAvailability = async (req, res) => {
+    try {
+        const { lecturerId } = req.params;
+        const lecturerInfo = await lecturerModel.findOne({ userId: lecturerId });
+        if (!lecturerInfo) {
+            return res.json({ success: false, message: "Lecturer not found" });
+        }
+        res.json({ success: true, availability: lecturerInfo.availability || [] });
+    } catch (error) {
+        console.log(error);
+        res.json({ success: false, message: error.message });
+    }
+};
 
+// API to get lecturer profile
+// API to get lecturer profile
 // API to get lecturer profile
 const lecturerProfile = async (req, res) => {
     try {
         const { userId } = req.body;
-        const userData = await userModel.findById(userId).select('-password');
-        const lecturerInfo = await lecturerModel.findOne({ userId });
 
-        res.json({ success: true, userData, lecturerInfo });
+        if (!userId) {
+            return res.json({ success: false, message: "User ID not found" });
+        }
+
+        const userData = await userModel.findById(userId).select('-password');
+        if (!userData) {
+            return res.json({ success: false, message: "User not found" });
+        }
+
+        let lecturerInfo = await lecturerModel.findOne({ userId });
+
+        // If lecturer info doesn't exist, create a basic one
+        if (!lecturerInfo) {
+            lecturerInfo = await lecturerModel.create({
+                userId,
+                department: '',
+                specialization: '',
+                availability: []
+            });
+        }
+
+        // Combine the data into a single lecturer object
+        const lecturer = {
+            ...lecturerInfo.toObject(),
+            userId: userData
+        };
+
+        res.json({ success: true, lecturer });
     } catch (error) {
         console.log(error);
         res.json({ success: false, message: error.message });
@@ -127,14 +206,22 @@ const updateLecturerProfile = async (req, res) => {
         const lecturerInfo = await lecturerModel.findOne({ userId });
         if (lecturerInfo) {
             const updateData = {};
-            if (department) updateData.department = department;
-            if (specialization) updateData.specialization = specialization;
+            if (department !== undefined) updateData.department = department;
+            if (specialization !== undefined) updateData.specialization = specialization;
             if (availability) updateData.availability = availability;
 
             await lecturerModel.findByIdAndUpdate(lecturerInfo._id, updateData);
         }
 
-        res.json({ success: true, message: 'Profile Updated' });
+        // Re-fetch the full profile to return
+        const userData = await userModel.findById(userId).select('-password');
+        const updatedLecturer = await lecturerModel.findOne({ userId });
+        const lecturer = {
+            ...updatedLecturer.toObject(),
+            userId: userData
+        };
+
+        res.json({ success: true, message: 'Profile Updated', lecturer });
     } catch (error) {
         console.log(error);
         res.json({ success: false, message: error.message });
@@ -174,12 +261,37 @@ const lecturerDashboard = async (req, res) => {
     }
 };
 
+// API to upload profile photo
+const uploadPhoto = async (req, res) => {
+    try {
+        const { userId } = req.body;
+
+        if (!req.file) {
+            return res.json({ success: false, message: "No image file provided" });
+        }
+
+        // Convert to base64 data URL
+        const base64 = req.file.buffer.toString('base64');
+        const dataUrl = `data:${req.file.mimetype};base64,${base64}`;
+
+        await userModel.findByIdAndUpdate(userId, { image: dataUrl });
+
+        res.json({ success: true, message: "Photo uploaded successfully", image: dataUrl });
+    } catch (error) {
+        console.log(error);
+        res.json({ success: false, message: error.message });
+    }
+};
+
 export {
     appointmentsLecturer,
     appointmentApprove,
     appointmentDecline,
+    updateZoomLink,
     lecturerList,
+    lecturerAvailability,
     lecturerDashboard,
     lecturerProfile,
-    updateLecturerProfile
+    updateLecturerProfile,
+    uploadPhoto
 };
