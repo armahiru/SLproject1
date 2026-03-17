@@ -3,6 +3,7 @@ import lecturerModel from "../models/LecturerModels.js";
 import appointmentModel from "../models/AppointmentModels.js";
 import notificationModel from "../models/NotificationModels.js";
 import mongoose from "mongoose";
+import { sendAppointmentApprovedEmail, sendAppointmentDeclinedEmail, sendZoomLinkEmail } from "../config/nodemailer.js";
 
 function ensureDbConnected(res) {
     if (mongoose.connection?.readyState !== 1) {
@@ -50,6 +51,22 @@ const appointmentApprove = async (req, res) => {
                 status: 'UNREAD'
             });
 
+            // Send email notification to student
+            try {
+                const studentUser = await userModel.findById(appointmentData.studentId);
+                const lecturerUser = await userModel.findById(userId);
+                if (studentUser?.email) {
+                    await sendAppointmentApprovedEmail(
+                        studentUser.email,
+                        studentUser.name,
+                        lecturerUser?.name || 'Lecturer',
+                        appointmentData.date,
+                        appointmentData.topic,
+                        appointmentData.meetingType
+                    );
+                }
+            } catch (emailErr) { console.error('Failed to send approval email:', emailErr); }
+
             return res.json({ success: true, message: 'Appointment Approved' });
         }
 
@@ -76,6 +93,21 @@ const appointmentDecline = async (req, res) => {
                 message: 'Your appointment has been declined',
                 status: 'UNREAD'
             });
+
+            // Send email notification to student
+            try {
+                const studentUser = await userModel.findById(appointmentData.studentId);
+                const lecturerUser = await userModel.findById(userId);
+                if (studentUser?.email) {
+                    await sendAppointmentDeclinedEmail(
+                        studentUser.email,
+                        studentUser.name,
+                        lecturerUser?.name || 'Lecturer',
+                        appointmentData.date,
+                        appointmentData.topic
+                    );
+                }
+            } catch (emailErr) { console.error('Failed to send decline email:', emailErr); }
 
             return res.json({ success: true, message: 'Appointment Declined' });
         }
@@ -117,6 +149,21 @@ const updateZoomLink = async (req, res) => {
             message: 'Zoom link has been added to your appointment',
             status: 'UNREAD'
         });
+
+        // Send email notification to student with zoom link
+        try {
+            const studentUser = await userModel.findById(appointmentData.studentId);
+            const lecturerUser = await userModel.findById(userId);
+            if (studentUser?.email) {
+                await sendZoomLinkEmail(
+                    studentUser.email,
+                    studentUser.name,
+                    lecturerUser?.name || 'Lecturer',
+                    appointmentData.date,
+                    zoomLink
+                );
+            }
+        } catch (emailErr) { console.error('Failed to send zoom link email:', emailErr); }
 
         res.json({ success: true, message: "Zoom link updated successfully" });
     } catch (error) {

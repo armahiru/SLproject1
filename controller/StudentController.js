@@ -4,6 +4,7 @@ import studentModel from "../models/StudentModels.js";
 import appointmentModel from "../models/AppointmentModels.js";
 import notificationModel from "../models/NotificationModels.js";
 import mongoose from "mongoose";
+import { sendNewAppointmentEmail, sendAppointmentCancelledEmail } from "../config/nodemailer.js";
 
 function ensureDbConnected(res) {
     if (mongoose.connection?.readyState !== 1) {
@@ -156,6 +157,22 @@ const bookAppointment = async (req, res) => {
             status: 'UNREAD'
         });
 
+        // Send email notification to lecturer
+        try {
+            const lecturerUser = await userModel.findById(lecturerId);
+            const studentUser = await userModel.findById(userId);
+            if (lecturerUser?.email) {
+                await sendNewAppointmentEmail(
+                    lecturerUser.email,
+                    lecturerUser.name,
+                    studentUser?.name || 'Student',
+                    date,
+                    topic,
+                    meetingType || 'in-person'
+                );
+            }
+        } catch (emailErr) { console.error('Failed to send new appointment email:', emailErr); }
+
         res.json({ success: true, message: "Appointment request sent" });
     } catch (error) {
         console.log(error);
@@ -186,6 +203,21 @@ const cancelAppointment = async (req, res) => {
             message: 'Student cancelled an appointment',
             status: 'UNREAD'
         });
+
+        // Send email notification to lecturer
+        try {
+            const lecturerUser = await userModel.findById(appointmentData.lecturerId);
+            const studentUser = await userModel.findById(userId);
+            if (lecturerUser?.email) {
+                await sendAppointmentCancelledEmail(
+                    lecturerUser.email,
+                    lecturerUser.name,
+                    studentUser?.name || 'Student',
+                    appointmentData.date,
+                    appointmentData.topic
+                );
+            }
+        } catch (emailErr) { console.error('Failed to send cancellation email:', emailErr); }
 
         res.json({ success: true, message: 'Appointment Cancelled' });
     } catch (error) {
