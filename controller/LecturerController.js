@@ -280,7 +280,9 @@ const lecturerDashboard = async (req, res) => {
     try {
         const { userId } = req.body;
 
-        const appointments = await appointmentModel.find({ lecturerId: userId });
+        const appointments = await appointmentModel.find({ lecturerId: userId })
+            .populate('studentId', 'name email')
+            .sort({ createdAt: -1 });
 
         const pendingCount = appointments.filter(a => a.status === 'PENDING').length;
         const approvedCount = appointments.filter(a => a.status === 'APPROVED').length;

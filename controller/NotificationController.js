@@ -18,7 +18,7 @@ const getNotifications = async (req, res) => {
 // API to mark notification as read
 const markAsRead = async (req, res) => {
     try {
-        const { notificationId } = req.body;
+        const notificationId = req.params.id || req.body.notificationId;
 
         await notificationModel.findByIdAndUpdate(notificationId, { status: 'READ' });
 
