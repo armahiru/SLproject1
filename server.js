@@ -12,7 +12,6 @@ import dashboardRouter from "./routes/DashboardRoute.js";
 // app config
 const app = express();
 const port = process.env.PORT || 3000;
-connectDB();
 
 // middlewares
 app.use(express.json());
@@ -45,4 +44,8 @@ app.get("/", (req, res) => {
   res.send("UniConsult Backend API - MongoDB");
 });
 
-app.listen(port, () => console.log(`Server started on PORT:${port}`));
+app.listen(port, () => {
+  console.log(`Server started on PORT:${port}`);
+  // Connect to MongoDB after server is listening (non-blocking)
+  connectDB();
+});
