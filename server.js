@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import "dotenv/config";
 import connectDB from "./config/MongoDB.js";
+import transporter from "./config/nodemailer.js";
 import authRouter from "./routes/AuthRoute.js";
 import studentRouter from "./routes/StudentRoute.js";
 import lecturerRouter from "./routes/LecturerRoute.js";
@@ -42,6 +43,21 @@ app.use("/api/dashboard", dashboardRouter);
 
 app.get("/", (req, res) => {
   res.send("UniConsult Backend API - MongoDB");
+});
+
+// Test email endpoint - visit /test-email to check if email sending works
+app.get("/test-email", async (req, res) => {
+  try {
+    const info = await transporter.sendMail({
+      from: `"UniConsult" <${process.env.EMAIL_USER}>`,
+      to: process.env.EMAIL_USER,
+      subject: "UniConsult Email Test",
+      html: "<h2>Email is working!</h2><p>If you see this, your email config is correct.</p>"
+    });
+    res.json({ success: true, message: "Test email sent!", messageId: info.messageId });
+  } catch (error) {
+    res.json({ success: false, message: error.message, code: error.code });
+  }
 });
 
 app.listen(port, () => {

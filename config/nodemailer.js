@@ -6,8 +6,16 @@ const transporter = nodemailer.createTransport({
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASSWORD
-    }
+    },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000
 });
+
+// Verify transporter on startup
+transporter.verify()
+    .then(() => console.log('✅ Email transporter ready -', process.env.EMAIL_USER))
+    .catch((err) => console.error('❌ Email transporter error:', err.message, '| User:', process.env.EMAIL_USER, '| Pass length:', process.env.EMAIL_PASSWORD?.length));
 
 // Send verification email
 export const sendVerificationEmail = async (email, verificationToken, name) => {
