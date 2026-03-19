@@ -49,9 +49,9 @@ app.get("/", (req, res) => {
 app.get("/test-email", async (req, res) => {
   try {
     const result = await emailService.sendEmail(
-      process.env.EMAIL_USER || 'test@example.com',
+      process.env.SENDER_EMAIL || 'uniconsult2@gmail.com',
       "UniConsult Email Test",
-      "<h2>Email is working!</h2><p>If you see this, Resend is configured correctly.</p>"
+      "<h2>Email is working!</h2><p>If you see this, Brevo email is configured correctly on Render.</p>"
     );
     res.json(result);
   } catch (error) {
