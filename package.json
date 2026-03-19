@@ -12,6 +12,7 @@
     "test-email": "node test-email.js"
   },
   "dependencies": {
+    "@getbrevo/brevo": "^5.0.1",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
     "dotenv": "^16.6.1",

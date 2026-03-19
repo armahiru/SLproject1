@@ -1,31 +1,45 @@
-import { Resend } from 'resend';
+// Email service using Brevo (Sendinblue) HTTP API
+// No SMTP needed - works on Render free tier
+// Free: 300 emails/day, no domain verification required
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const BREVO_API_KEY = process.env.BREVO_API_KEY;
+const SENDER_EMAIL = process.env.SENDER_EMAIL || 'uniconsult2@gmail.com';
+const SENDER_NAME = process.env.SENDER_NAME || 'UniConsult';
 
-const FROM_EMAIL = process.env.FROM_EMAIL || 'UniConsult <onboarding@resend.dev>';
-
-// Helper to send email via Resend HTTP API
 const sendEmail = async (to, subject, html) => {
+    if (!BREVO_API_KEY) {
+        console.error('❌ BREVO_API_KEY not set');
+        return { success: false, error: 'Email API key not configured' };
+    }
     try {
-        const { data, error } = await resend.emails.send({
-            from: FROM_EMAIL,
-            to: [to],
-            subject,
-            html
+        const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+            method: 'POST',
+            headers: {
+                'accept': 'application/json',
+                'api-key': BREVO_API_KEY,
+                'content-type': 'application/json'
+            },
+            body: JSON.stringify({
+                sender: { name: SENDER_NAME, email: SENDER_EMAIL },
+                to: [{ email: to }],
+                subject,
+                htmlContent: html
+            })
         });
-        if (error) {
-            console.error('Resend email error:', error);
-            return { success: false, error: error.message };
+        const data = await res.json();
+        if (res.ok) {
+            console.log('✅ Email sent to:', to, '| messageId:', data.messageId);
+            return { success: true };
         }
-        console.log('✅ Email sent:', data?.id, 'to:', to);
-        return { success: true };
+        console.error('❌ Brevo error:', data);
+        return { success: false, error: data.message || 'Email send failed' };
     } catch (err) {
-        console.error('Email sending error:', err.message);
+        console.error('❌ Email error:', err.message);
         return { success: false, error: err.message };
     }
 };
 
-// Shared email styles
+// Shared email template
 const emailWrapper = (headerBg, headerTitle, bodyContent) => `
 <!DOCTYPE html>
 <html>
@@ -94,21 +108,21 @@ export const sendPasswordChangedEmail = async (email, name) => {
 // ===== APPOINTMENT EMAILS =====
 
 export const sendAppointmentApprovedEmail = async (email, studentName, lecturerName, date, topic, meetingType) => {
-    return sendEmail(email, '✅ Appointment Approved - UniConsult', emailWrapper('#16A34A', 'Appointment Approved ✅', `
+    return sendEmail(email, 'Appointment Approved - UniConsult', emailWrapper('#16A34A', 'Appointment Approved ✅', `
         <h2>Hi ${studentName},</h2>
         <p>Great news! Your appointment has been <strong>approved</strong>.</p>
         <div class="details">
             <p><span class="label">Lecturer:</span> ${lecturerName}</p>
             <p><span class="label">Date & Time:</span> ${formatDate(date)}</p>
             <p><span class="label">Topic:</span> ${topic || 'Not specified'}</p>
-            <p><span class="label">Meeting Type:</span> ${meetingType === 'online' ? '💻 Online' : '🏫 In-Person'}</p>
+            <p><span class="label">Meeting Type:</span> ${meetingType === 'online' ? 'Online' : 'In-Person'}</p>
         </div>
         <p>Please make sure to be on time.</p>
     `));
 };
 
 export const sendAppointmentDeclinedEmail = async (email, studentName, lecturerName, date, topic) => {
-    return sendEmail(email, '❌ Appointment Declined - UniConsult', emailWrapper('#DC2626', 'Appointment Declined', `
+    return sendEmail(email, 'Appointment Declined - UniConsult', emailWrapper('#DC2626', 'Appointment Declined', `
         <h2>Hi ${studentName},</h2>
         <p>Unfortunately, your appointment has been <strong>declined</strong>.</p>
         <div class="details">
@@ -121,21 +135,21 @@ export const sendAppointmentDeclinedEmail = async (email, studentName, lecturerN
 };
 
 export const sendNewAppointmentEmail = async (email, lecturerName, studentName, date, topic, meetingType) => {
-    return sendEmail(email, '📋 New Appointment Request - UniConsult', emailWrapper('#2563EB', 'New Appointment Request 📋', `
+    return sendEmail(email, 'New Appointment Request - UniConsult', emailWrapper('#2563EB', 'New Appointment Request', `
         <h2>Hi ${lecturerName},</h2>
         <p>You have a new appointment request.</p>
         <div class="details">
             <p><span class="label">Student:</span> ${studentName}</p>
             <p><span class="label">Date & Time:</span> ${formatDate(date)}</p>
             <p><span class="label">Topic:</span> ${topic || 'Not specified'}</p>
-            <p><span class="label">Meeting Type:</span> ${meetingType === 'online' ? '💻 Online' : '🏫 In-Person'}</p>
+            <p><span class="label">Meeting Type:</span> ${meetingType === 'online' ? 'Online' : 'In-Person'}</p>
         </div>
         <a href="${frontendUrl()}/lecturer/appointments" class="button">View Requests</a>
     `));
 };
 
 export const sendAppointmentCancelledEmail = async (email, lecturerName, studentName, date, topic) => {
-    return sendEmail(email, '🚫 Appointment Cancelled - UniConsult', emailWrapper('#D97706', 'Appointment Cancelled', `
+    return sendEmail(email, 'Appointment Cancelled - UniConsult', emailWrapper('#D97706', 'Appointment Cancelled', `
         <h2>Hi ${lecturerName},</h2>
         <p>A student has <strong>cancelled</strong> their appointment.</p>
         <div class="details">
@@ -147,7 +161,7 @@ export const sendAppointmentCancelledEmail = async (email, lecturerName, student
 };
 
 export const sendZoomLinkEmail = async (email, studentName, lecturerName, date, zoomLink) => {
-    return sendEmail(email, '🔗 Zoom Link Added - UniConsult', emailWrapper('#4F46E5', 'Zoom Link Added 🔗', `
+    return sendEmail(email, 'Zoom Link Added - UniConsult', emailWrapper('#4F46E5', 'Zoom Link Added', `
         <h2>Hi ${studentName},</h2>
         <p>A Zoom link has been added to your appointment.</p>
         <div class="details">
@@ -159,5 +173,4 @@ export const sendZoomLinkEmail = async (email, studentName, lecturerName, date, 
     `));
 };
 
-// Export for test endpoint
 export default { sendEmail };
